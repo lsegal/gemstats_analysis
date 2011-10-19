@@ -301,6 +301,13 @@ h2 { font-size: 1em; border-top: 1px solid #ddd; padding-top: 5px; }
         }
         return {labels: labels, data: data};
     }
+    
+    function checkInitialization() {
+        var result = window.location.hash.match(/\bg=(\d+)/);
+        if (result != null) {
+            activeGraph.switchGraph(parseInt(result[1]) - 1);
+        }
+    }
 
     $(function () {
         var cgraph = new CanvasGraph('#content');
@@ -333,22 +340,6 @@ h2 { font-size: 1em; border-top: 1px solid #ddd; padding-top: 5px; }
             cgraph.registerGraph("Correlation over Gem Data Set (GemStats.org Data Set, n=400 sample size sliding window)", function(cg) {
                 g.plotLine(cg.canvas.attr('id'), 6, 4, 0, 1500);
             });
-            cgraph.switchGraph(0);
-            $.get('data/data+watchers.csv', function(csv) {
-                var g = new Graph(parseCSV(csv));
-                cgraph.registerGraph("Watchers vs. Forks of Top 25 Popular Projects", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 10, 9, 0, 25);
-                });
-                cgraph.registerGraph("Downloads vs. Watchers/Forks of Top Popular Projects", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 6, [9, 10], 0, g.data.length);
-                });
-                cgraph.registerGraph("Usage vs. Watchers/Forks of Top Popular Projects (GemStats.org Data)", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 4, [9, 10], 0, g.data.length);
-                });
-                cgraph.registerGraph("Usage vs. Watchers/Forks of Top Popular Projects (NewRelic Data)", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 5, [9, 10], 0, g.data.length);
-                });
-            });
             $.get('data/data.railsonly.csv', function(csv) {
                 var g = new Graph(parseCSV(csv));
                 cgraph.registerGraph("Download Count vs. Rails Gems / Deps (GemStats.org Data)", function(cg) {
@@ -360,19 +351,36 @@ h2 { font-size: 1em; border-top: 1px solid #ddd; padding-top: 5px; }
                 cgraph.registerGraph("Download Count vs. Rails Gems / Deps (NewRelic Data)", function(cg) {
                     g.plotColumns(cg.canvas.attr('id'), 6, 5, 0, 40);
                 });
+                $.get('data/data.nonrails.csv', function(csv) {
+                    var g = new Graph(parseCSV(csv));
+                    cgraph.registerGraph("Download Count vs. Top 40 Non-Rails Gems (GemStats.org Data)", function(cg) {
+                        g.plotColumns(cg.canvas.attr('id'), 6, 4, 0, 40);
+                    });
+                    cgraph.registerGraph("Top 40 Non-Rails Gems vs. Total Download Count (GemStats.org Data)", function(cg) {
+                        g.plotColumns(cg.canvas.attr('id'), 4, 6, 0, 40, [color2, color1]);
+                    });
+                    cgraph.registerGraph("Download Count vs. Top 40 Non-Rails Gems (NewRelic Data)", function(cg) {
+                        g.plotColumns(cg.canvas.attr('id'), 6, 5, 0, 40);
+                    });
+                    $.get('data/data+watchers.csv', function(csv) {
+                        var g = new Graph(parseCSV(csv));
+                        cgraph.registerGraph("Watchers vs. Forks of Top 25 Popular Projects", function(cg) {
+                            g.plotColumns(cg.canvas.attr('id'), 10, 9, 0, 25);
+                        });
+                        cgraph.registerGraph("Downloads vs. Watchers/Forks of Top Popular Projects", function(cg) {
+                            g.plotColumns(cg.canvas.attr('id'), 6, [9, 10], 0, g.data.length);
+                        });
+                        cgraph.registerGraph("Usage vs. Watchers/Forks of Top Popular Projects (GemStats.org Data)", function(cg) {
+                            g.plotColumns(cg.canvas.attr('id'), 4, [9, 10], 0, g.data.length);
+                        });
+                        cgraph.registerGraph("Usage vs. Watchers/Forks of Top Popular Projects (NewRelic Data)", function(cg) {
+                            g.plotColumns(cg.canvas.attr('id'), 5, [9, 10], 0, g.data.length);
+                        });
+                        checkInitialization();
+                    });
+                });
             });
-            $.get('data/data.nonrails.csv', function(csv) {
-                var g = new Graph(parseCSV(csv));
-                cgraph.registerGraph("Download Count vs. Top 40 Non-Rails Gems (GemStats.org Data)", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 6, 4, 0, 40);
-                });
-                cgraph.registerGraph("Top 40 Non-Rails Gems vs. Total Download Count (GemStats.org Data)", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 4, 6, 0, 40, [color2, color1]);
-                });
-                cgraph.registerGraph("Download Count vs. Top 40 Non-Rails Gems (NewRelic Data)", function(cg) {
-                    g.plotColumns(cg.canvas.attr('id'), 6, 5, 0, 40);
-                });
-            });
+            cgraph.switchGraph(0);
         });
         
         $(window).keydown(function(event) {
