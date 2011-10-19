@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script type="text/javascript" src="lib/jquery.min.js"></script>
+<script type="text/javascript" src="lib/RGraph.common.core.js"></script>
+<script type="text/javascript" src="lib/RGraph.common.tooltips.js"></script>
+<script type="text/javascript" src="lib/RGraph.common.context.js"></script>
+<script type="text/javascript" src="lib/RGraph.bar.js"></script>
+<script type="text/javascript" src="lib/RGraph.scatter.js"></script>
+<style> 
+body { font-family: sans-serif; } 
+h2 { font-size: 1em; border-top: 1px solid #ddd; padding-top: 5px; } 
+.canvasGraph { width:640px; margin-right: 40px; float: left; }
+.canvasGraph h2 { height: 2em; }
+.canvasGraph .graphs { font-size: 0.9em; }
+.canvasGraph .graphs li { line-height: 1.6em; border: 1px solid #ddd; padding-left: 5px; border-bottom: 0; }
+.canvasGraph .graphs li.selected { background: #ddf; }
+.canvasGraph .graphs li:last-child { border-bottom: 1px solid #ddd; }
+.canvasGraph .graphs a { text-decoration: none; }
+.canvasGraph .graphs li.selected a { cursor: default; }
+.canvasGraph .graphs a:visited { color: #00f; }
+.canvasGraph .navigate_help { float: right; color: #666; }
+</style>
+<title>Gem Popularity Analysis</title>
+</head>
+<body>
+<div id="content">
+<h1>Gem Popularity Analysis</h1>
+<script type="text/javascript">
+    var activeGraph = null;
+    var color1 = 'rgba(220,100,40,1)';
+    var color2 = 'rgba(0,40,220,1)';
+    var color3 = 'rgba(0,220,40,1)';
+    var color4 = 'rgba(100,220,40,1)';
+
+    function mean(data, r, limits) {
+        if (typeof(limits) == 'undefined') limits = [0, data.length];
+        var total = 0, n = limits[1] - limits[0];
+        for (var i = limits[0]; i < limits[1]; i++) {
+            total += data[i][r];
+        }
+        return total / n;
+    }
+    
+    function stdev(data, r, limits) {
+        if (typeof(limits) == 'undefined') limits = [0, data.length];
+        var total = 0, m = mean(data, r, limits);
+        var n = limits[1] - limits[0];
+        for (var i = limits[0]; i < limits[1]; i++) {
+            total += (data[i][r] - m) * (data[i][r] - m);
+        }
+        return Math.sqrt((1.0/n) * total);
+    }
+    
+    function covariance(data, r1, r2, limits) {
+        if (typeof(limits) == 'undefined') limits = [0, data.length];
+        var n = limits[1] - limits[0];
+        var total = 0, m1 = mean(data, r1, limits), m2 = mean(data, r2, limits);
+        for (var i = limits[0]; i < limits[1]; i++) {
+            total += (data[i][r1] - m1) * (data[i][r2] - m2);
+        }
+        return (1.0/(n-1.0)) * total;
+    }
+    
+    function correlation(data, r1, r2, limits) {
+        return covariance(data, r1, r2, limits) / (stdev(data, r1, limits) * stdev(data, r2, limits));
+    }
+
+    function printCorrelation(corr) {
+        var str = '' + (Math.round(corr*1000000)/1000000);
+        corr = Math.abs(corr);
+        var type = 'NONE';
+        var corrs = {'1.0':'PERFECT','0.9':'VERY HIGH','0.7':'HIGH',
+                     '0.5':'MODERATE','0.3':'LOW','0.0':'VERY LOW'};
+        for (var val in corrs) {
+            if (corr >= parseFloat(val)) {
+                type = corrs[val];
+                break;
+            }
+        }
+        str += ' (' + type + ')';
+        return str;
+    }
+
+    function Graph(dataObject) {
+        var allLabels = dataObject.labels;
+        var allData = dataObject.data;
+        this.data = dataObject.data;
+        this.labels = dataObject.labels;
+        
+        this.plotColumns = function(canvas, x, y, start, num, colors) {
+            if (typeof(colors) == 'undefined') colors = [color1, color2, color3, color4];
+            if (typeof y == 'number') { y = [y]; }
+            var data = [];
+            var labels = [];
+            var tooltips = [];
+            var legend = [allLabels[x]];
+            var myData = allData.sort(function(a, b) { return b[x] - a[x]; });
+            for (var i = 0; i < y.length; i++) {
+                legend.push(allLabels[y[i]]);
+            }
+            for (var i = start; i < start+num; i++) {
+                labels.push(myData[i][0]);
+                tooltips.push(myData[i][0]);
+                var plotData = [myData[i][x]*100];
+                for (var j = 0; j < y.length; j++) {
+                    tooltips.push(myData[i][0]);
+                    plotData.push(myData[i][y[j]]*100);
+                }
+                data.push(plotData);
+            }
+            var bar = new RGraph.Bar(canvas, data);
+            if (num < 100) bar.Set('chart.labels', labels);
+            bar.Set('chart.title', 'Data set correlation: ' + printCorrelation(correlation(myData, x,y[0],[start,start+num])));
+            bar.Set('chart.ymax', 100);
+            bar.Set('chart.units.post', '%');
+            bar.Set('chart.gutter.left', 45);
+            bar.Set('chart.gutter.bottom', 145);
+            bar.Set('chart.key', legend);
+            bar.Set('chart.tooltips', tooltips);
+            bar.Set('chart.tooltips.event', 'onmousemove');
+            bar.Set('chart.hmargin', 1);
+            bar.Set('chart.background.barcolor1', 'rgba(255,255,255,1)');
+            bar.Set('chart.background.barcolor2', 'rgba(255,255,255,1)');
+            bar.Set('chart.background.grid', true);
+            bar.Set('chart.background.grid.vlines', false);
+            bar.Set('chart.text.angle', 65);
+            bar.Set('chart.strokecolor', 'rgba(0,0,0,0)');
+            bar.Set('chart.colors', colors);
+            if (num >= 100) {
+                bar.Set('chart.gutter.bottom', 0);
+            }
+            bar.Draw();
+        }
+
+        this.plotScatter = function(canvas, x, y, start, num, colors) {
+            if (typeof(colors) == 'undefined') colors = [color1, color2];
+            var data = [];
+            var labels = [];
+            var legend = [allLabels[x], allLabels[y]];
+            var myData = allData.sort(function(a, b) { return b[x] - a[x]; });
+            for (var i = start; i < start+num; i++) {
+                labels.push(myData[i][0]);
+                data.push([i, myData[i][x]*100, colors[0], myData[i][0]]);
+                data.push([i, myData[i][y]*100, colors[1], myData[i][0]]);
+            }
+            var scatter = new RGraph.Scatter(canvas, data);
+            //scatter.Set('chart.labels', labels);
+            scatter.Set('chart.title', 'Data set correlation: ' + printCorrelation(correlation(myData, x,y,[start,start+num])));
+            scatter.Set('chart.ymax', 100);
+            scatter.Set('chart.xmax', num + 1);
+            scatter.Set('chart.units.post', '%');
+            scatter.Set('chart.gutter.left', 45);
+            scatter.Set('chart.gutter.bottom', 0);
+            scatter.Set('chart.key', legend);
+            scatter.Set('chart.background.grid', true);
+            scatter.Set('chart.background.grid.vlines', false);
+            scatter.Set('chart.noaxes', true);
+            scatter.Set('chart.line.colors', colors);
+            scatter.Draw();
+        }
+        
+        this.plotLine = function(canvas, x, y, start, num, colors) {
+            if (typeof(colors) == 'undefined') colors = [color1, color2];
+            var corrs = {'0.9':'VERY HIGH','0.7':'HIGH','0.5':'MODERATE','0.3':'LOW'};
+            var corrcolors = {'0.9':'rgba(220,0,40,0.5)','0.7':'rgba(200,100,60,0.5)',
+                              '0.5':'rgba(0,140,0,0.5)','0.3':'rgba(50,20,100,0.5)'};
+            var data = [];
+            var labels = [];
+            var legend = [allLabels[x], allLabels[y]];
+            var myData = allData.sort(function(a, b) { return b[x] - a[x]; });
+            for (var i = start; i < start+num; i++) {
+                var min = i - 200;
+                var max = i + 200;
+                if (min < 0) min = 0;
+                if (max > myData.length) max = myData.length;
+                data.push([i, correlation(myData, x,y,[min,max]) * 100, '{' + myData[min][0] + ' to ' + myData[max][0] + '}']);
+                if (i % 75 == 0) labels.push(i);
+            }
+
+            for (val in corrs) {
+                var cdata = [[start, parseFloat(val) * 100], [start+num, parseFloat(val) * 100]];
+                var c = [corrcolors[val]];
+                var line = new RGraph.Scatter(canvas, cdata);
+                line.Set('chart.ymax', 100);
+                line.Set('chart.xmax', num + 1);
+                line.Set('chart.units.post', '%');
+                line.Set('chart.gutter.left', 45);
+                line.Set('chart.gutter.bottom', 40);
+                line.Set('chart.noaxes', true);
+                line.Set('chart.tickmarks', null);
+                line.Set('chart.background.grid', false);
+                line.Set('chart.line', true);
+                line.Set('chart.line.linewidth', 2);
+                line.Set('chart.line.colors', c);
+                line.Draw();
+            }
+
+
+            var line = new RGraph.Scatter(canvas, data);
+            line.Set('chart.labels', labels);
+            //scatter.Set('chart.title', 'Data set correlation: ' + printCorrelation(correlation(x,y,[start,start+num])));
+            line.Set('chart.ymax', 100);
+            line.Set('chart.xmax', num + 1);
+            line.Set('chart.units.post', '%');
+            line.Set('chart.gutter.left', 45);
+            line.Set('chart.gutter.bottom', 40);
+            line.Set('chart.key', ['Correlation', '>= VERY HIGH', '>= HIGH', '>= MODERATE', '>= LOW']);
+            line.Set('chart.xticks', labels);
+            line.Set('chart.text.angle', 90);
+            line.Set('chart.tickmarks', null);
+            line.Set('chart.background.grid', true);
+            line.Set('chart.background.grid.hlines', false);
+            line.Set('chart.background.grid.vlines', true);
+            line.Set('chart.line', true);
+            line.Set('chart.line.linewidth', 2);
+            line.Set('chart.line.colors', [colors[1],corrcolors['0.9'],corrcolors['0.7'],corrcolors['0.5'],corrcolors['0.3']]);
+            line.Draw();
+        }
+        
+        return this;
+    }
+    
+    function CanvasGraph(root) {
+        var self = this;
+        this.div = $('<div class="canvasGraph"><h2></h2><canvas width="640" height="400"></canvas><ol class="graphs"/><button class="png">Get PNG</button><button class="new">New Canvas</button><small class="navigate_help">Use &larr; and &rarr; to navigate</small></div>');
+        this.canvas = this.div.children('canvas');
+        this.graphs = [];
+        this.currentGraph = 0;
+        
+        
+        this.setTitle = function(title) {
+            this.div.children('h2').html(title);
+        }
+        
+        this.draw = function() { 
+            var obj = this.graphs[this.currentGraph];
+            this.setTitle(obj.title);
+            RGraph.HideTooltip();
+            RGraph.RemoveAllCustomEventListeners(this.canvas[0]);
+            RGraph.Clear(this.canvas[0]);
+            obj.func(this);
+        }
+        
+        this.registerGraph = function(title, f) {
+            this.graphs.push({title:title, func:f});
+            var num = this.graphs.length - 1;
+            var button = $('<li><a href="#">'+title+'</a></li>');
+            button.children('a').click(function() { 
+                if ($(this).parent('li').hasClass('selected')) return false;
+                self.switchGraph(num); return false; 
+            });
+            this.div.children('ol.graphs').append(button);
+        }
+        
+        this.switchGraph = function(n) {
+            activeGraph = this;
+            this.currentGraph = n;
+            $(this.div.find('.graphs li').removeClass('selected')[n]).addClass('selected');
+            this.draw();
+        }
+        
+        this.nextGraph = function() {
+            this.switchGraph((this.currentGraph + 1) % this.graphs.length);
+        }
+        
+        this.prevGraph = function() {
+            var prev = this.currentGraph - 1;
+            this.switchGraph(prev < 0 ? this.graphs.length - 1 : prev);
+        }
+        
+        $(root).append(this.div);
+        this.canvas.attr('id', 'canvas' + $('canvas').size());
+        this.div.children('.png').click(function() {
+            RGraph.showPNG(self.canvas[0]);
+            return false;
+        });
+        this.div.children('.new').click(function() {
+            var cg = new CanvasGraph('#content');
+            for (var index in self.graphs) {
+                cg.registerGraph(self.graphs[index].title, self.graphs[index].func);
+            }
+            cg.switchGraph(self.currentGraph);
+            return false;
+        });
+        this.div.click(function() { activeGraph = self; });
+    }
+    
+    function parseCSV(csv) {
+        var labels = [];
+        var data = [];
+        var lines = csv.split("\n");
+        labels = lines[0].split(",");
+        for (var i = 1; i < lines.length; i++) {
+            var components = lines[i].split(",");
+            if (components.length < 2) continue;
+            for (var x = 1; x < components.length; x++) {
+                components[x] = parseFloat(components[x]);
+            }
+            data.push(components);
+        }
+        return {labels: labels, data: data};
+    }
+
+    $(function () {
+        var cgraph = new CanvasGraph('#content');
+        $.get('data/data.csv', function(csv) {
+            var g = new Graph(parseCSV(csv));
+            cgraph.registerGraph("Download Count of 50 Most Downloaded Gems vs. Usage (GemStats.org Data)", function(cg) {
+                g.plotColumns(cg.canvas.attr('id'), 6, 4, 0, 50);
+            });
+            cgraph.registerGraph("Top 50 Used Gems vs. Total Download Count (GemStats.org Data)", function(cg) {
+                g.plotColumns(cg.canvas.attr('id'), 4, 6, 0, 50, [color2, color1]);
+            });
+            cgraph.registerGraph("Download Count of 50 Most Downloaded Gems vs. Usage (NewRelic Data)", function(cg) {
+                g.plotColumns(cg.canvas.attr('id'), 6, 5, 0, 50);
+            });
+            cgraph.registerGraph("Download Count of 25th-75th Most Downloaded Gems vs. Usage (NewRelic Data)", function(cg) {
+                g.plotColumns(cg.canvas.attr('id'), 6, 5, 25, 50);
+            });
+            cgraph.registerGraph("Download Count of 25th-225th Most Downloaded Gems vs. Usage (NewRelic Data)", function(cg) {
+                g.plotColumns(cg.canvas.attr('id'), 6, 4, 25, 200);
+            });
+            cgraph.registerGraph("All Used Gems vs. Total Download Count (GemStats.org Data Set)", function(cg) {
+                g.plotScatter(cg.canvas.attr('id'), 4, 6, 0, 1500);
+            });
+            cgraph.registerGraph("All Used Gems vs. Total Download Count (NewRelic Data Set)", function(cg) {
+                g.plotScatter(cg.canvas.attr('id'), 5, 6, 0, 1500);
+            });
+            cgraph.registerGraph("Correlation over Gem Data Set (NewRelic Data Set, n=400 sample size sliding window)", function(cg) {
+                g.plotLine(cg.canvas.attr('id'), 6, 5, 0, 1500);
+            });
+            cgraph.registerGraph("Correlation over Gem Data Set (GemStats.org Data Set, n=400 sample size sliding window)", function(cg) {
+                g.plotLine(cg.canvas.attr('id'), 6, 4, 0, 1500);
+            });
+            cgraph.switchGraph(0);
+            $.get('data/data+watchers.csv', function(csv) {
+                var g = new Graph(parseCSV(csv));
+                cgraph.registerGraph("Watchers vs. Forks of Top 25 Popular Projects", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 10, 9, 0, 25);
+                });
+                cgraph.registerGraph("Downloads vs. Watchers/Forks of Top Popular Projects", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 6, [9, 10], 0, g.data.length);
+                });
+                cgraph.registerGraph("Usage vs. Watchers/Forks of Top Popular Projects (GemStats.org Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 4, [9, 10], 0, g.data.length);
+                });
+                cgraph.registerGraph("Usage vs. Watchers/Forks of Top Popular Projects (NewRelic Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 5, [9, 10], 0, g.data.length);
+                });
+            });
+            $.get('data/data.railsonly.csv', function(csv) {
+                var g = new Graph(parseCSV(csv));
+                cgraph.registerGraph("Download Count vs. Rails Gems / Deps (GemStats.org Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 6, 4, 0, 40);
+                });
+                cgraph.registerGraph("Rails Gems vs. Total Download Count (GemStats.org Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 4, 6, 0, 40, [color2, color1]);
+                });
+                cgraph.registerGraph("Download Count vs. Rails Gems / Deps (NewRelic Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 6, 5, 0, 40);
+                });
+            });
+            $.get('data/data.nonrails.csv', function(csv) {
+                var g = new Graph(parseCSV(csv));
+                cgraph.registerGraph("Download Count vs. Top 40 Non-Rails Gems (GemStats.org Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 6, 4, 0, 40);
+                });
+                cgraph.registerGraph("Top 40 Non-Rails Gems vs. Total Download Count (GemStats.org Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 4, 6, 0, 40, [color2, color1]);
+                });
+                cgraph.registerGraph("Download Count vs. Top 40 Non-Rails Gems (NewRelic Data)", function(cg) {
+                    g.plotColumns(cg.canvas.attr('id'), 6, 5, 0, 40);
+                });
+            });
+        });
+        
+        $(window).keydown(function(event) {
+            if (activeGraph == null) return;
+            if (event.which == 37) activeGraph.prevGraph();
+            if (event.which == 39) activeGraph.nextGraph();
+        });
+    });
+    
+</script>
+</div>
+</body>
+</html>
